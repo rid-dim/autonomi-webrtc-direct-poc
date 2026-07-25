@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autonomi over WebRTC-Direct</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262b36;
+    --text: #e6e9ef; --muted: #98a1b3;
+    --accent: #4f9cf9; --ok: #46c890; --error: #f2666f;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f7f9; --panel: #fff; --line: #e2e6ec;
+      --text: #14181f; --muted: #5c6675;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem; background: var(--bg); color: var(--text);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .35rem; }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em;
+       color: var(--muted); margin: 0 0 .75rem; }
+  .lede { color: var(--muted); margin: 0 0 1.75rem; }
+  section {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+  }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .3rem; }
+  input {
+    width: 100%; padding: .6rem .7rem; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .hint { font-size: .8rem; color: var(--muted); margin-top: .45rem; }
+  .row {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .7rem 0; border-top: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .row:first-child { border-top: 0; }
+  .row code { display: block; font-size: .72rem; color: var(--muted); word-break: break-all; }
+  .button {
+    padding: .5rem .95rem; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: inherit; font-size: .88rem;
+    cursor: pointer; text-decoration: none; display: inline-block;
+  }
+  .button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .button:disabled { opacity: .5; cursor: not-allowed; }
+  .split { display: flex; gap: .6rem; }
+  .split input { flex: 1; }
+  .status { margin-top: 1rem; padding: .7rem .85rem; border-radius: 7px;
+            border: 1px solid var(--line); font-size: .88rem; }
+  .status.ok { border-color: var(--ok); color: var(--ok); }
+  .status.error { border-color: var(--error); color: var(--error); }
+  .status.working, .status.connecting { border-color: var(--accent); color: var(--accent); }
+  #progress { height: 4px; background: var(--line); border-radius: 2px;
+              overflow: hidden; margin-top: .6rem; }
+  #bar { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #result { margin-top: 1rem; display: flex; flex-direction: column; gap: .75rem; align-items: flex-start; }
+  #result audio { width: 100%; }
+  .note { font-size: .8rem; color: var(--muted); }
+  .note.ok { color: var(--ok); }
+  .note.error { color: var(--error); }
+  ul { margin: .4rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: .85rem; }
+  li + li { margin-top: .25rem; }
+  strong { color: var(--text); font-weight: 600; }
+  .claim p, .claim-p { margin: 0 0 .7rem; font-size: .9rem; color: var(--muted); }
+  .claim p:last-child, .claim-p:last-child { margin-bottom: 0; }
+
+  /* Flow diagram: three stages, connectors between them. Columns on wide
+     screens, a single stack on narrow ones — the connectors rotate to match.
+     Three columns plus connectors need more room than the reading column, so
+     the section breaks out of it once there is space. */
+  .flow { display: grid; gap: .5rem; grid-template-columns: 1fr; align-items: stretch; }
+  @media (min-width: 64rem) {
+    .wide {
+      width: min(74rem, calc(100vw - 3rem));
+      margin-left: 50%; transform: translateX(-50%);
+    }
+    .flow { grid-template-columns: 1fr auto 1fr auto 1fr; gap: .5rem; }
+  }
+  .node {
+    border: 1px solid var(--line); border-radius: 9px; padding: .8rem .85rem;
+    background: var(--bg); display: flex; flex-direction: column;
+  }
+  .node h3 { margin: .35rem 0 .2rem; font-size: .95rem; }
+  .node .role { margin: 0 0 .5rem; font-size: .78rem; color: var(--muted); }
+  .node ul { font-size: .8rem; margin: 0; }
+  .node .stack {
+    margin: .6rem 0 0; padding-top: .5rem; border-top: 1px solid var(--line);
+    font-size: .72rem; color: var(--muted);
+  }
+  .tag {
+    align-self: flex-start; font-size: .65rem; letter-spacing: .05em;
+    text-transform: uppercase; padding: .15rem .45rem; border-radius: 4px;
+    border: 1px solid currentColor;
+  }
+  .tag.new { color: var(--accent); }
+  .tag.stand-in { color: #d8a24a; }
+  .tag.unchanged { color: var(--muted); }
+  .link {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: .15rem; font-size: .72rem; color: var(--muted);
+    padding: .5rem .2rem; min-width: 7rem; max-width: 9rem;
+  }
+  .link strong { font-size: .78rem; }
+  .link .absent { color: var(--ok); }
+  footer { margin: 1.5rem 0 0; padding: 0 1.2rem; font-size: .8rem; color: var(--muted); }
+  footer p { margin: 0 0 .4rem; }
+  footer a { color: var(--accent); }
+  /* Horizontal on wide screens, vertical when the cards stack. */
+  .link .wire { background: var(--line); width: 2px; height: 1.1rem; margin-bottom: .2rem; }
+  @media (min-width: 56rem) {
+    .link .wire { width: 100%; height: 2px; margin-bottom: .35rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Autonomi over WebRTC-Direct</h1>
+  <p class="lede">
+    An ordinary web page, pulling a file straight off the Autonomi network.
+    <strong>No browser extension. No local daemon or relay. Nothing installed, and no
+    process running on this machine.</strong> Just a page and a WebRTC connection.
+  </p>
+
+  <section class="claim">
+    <h2>What is being demonstrated</h2>
+    <p>
+      Browsers speak QUIC perfectly well &mdash; HTTP/3 rides on it. What they cannot do is open
+      a <em>raw</em> connection to an arbitrary host and speak an arbitrary protocol: there is no
+      socket API, only HTTP/3 and WebTransport. Autonomi nodes run their own QUIC-based protocol
+      with their own handshake and identity model, and they have neither a DNS name nor a
+      CA-issued certificate. That combination &mdash; not QUIC itself &mdash; is what puts them
+      out of a browser's reach.
+    </p>
+    <p>
+      So the endpoint this page talks to is a <strong>stand-in for a node that also listens for
+      browsers</strong> &mdash; it answers exactly one question,
+      <em>&ldquo;what bytes are stored at this address?&rdquo;</em>, and does nothing else. It is
+      not a gateway: it never sees plaintext and cannot alter a byte.
+    </p>
+    <p>
+      So the question this answers is: <strong>if Autonomi nodes offered a WebRTC-Direct
+      listener alongside QUIC, could any website embed network content directly?</strong>
+      The answer below is yes &mdash; and were nodes to do that, this middle box would simply
+      disappear. Nothing in the browser would change.
+    </p>
+  </section>
+
+  <section>
+    <h2>WebRTC-Direct endpoint</h2>
+    <label for="proxy">Multiaddr &mdash; IP, UDP port and certificate hash</label>
+    <input id="proxy" spellcheck="false" autocapitalize="off" autocorrect="off"
+           placeholder="/ip4/203.0.113.7/udp/4001/webrtc-direct/certhash/uEi…/p2p/12D3Koo…">
+    <p class="hint">
+      A bare IP address &mdash; no domain name anywhere. The certificate hash at the end
+      is what replaces the certificate authority, so an IP and port alone are not enough
+      to connect. Swap in any other endpoint you like: the guarantees below do not depend
+      on trusting this one.
+    </p>
+    <p class="note" id="secure"></p>
+  </section>
+
+  <section>
+    <h2>Files</h2>
+    <div id="catalogue"></div>
+  </section>
+
+  <section>
+    <h2>Any address</h2>
+    <label for="address">64-character hex content address</label>
+    <div class="split">
+      <input id="address" spellcheck="false" autocapitalize="off" autocorrect="off"
+             placeholder="00ac7cbe1fe3e49fcd9e490eb313fabc2fe4407e67196292e961c3b34e9b1afa">
+      <button class="button" id="fetch-custom">Fetch</button>
+    </div>
+  </section>
+
+  <div class="status idle" id="status"></div>
+  <div id="progress" hidden><div id="bar"></div></div>
+  <div id="result"></div>
+
+  <section class="wide" style="margin-top:1.5rem">
+    <h2>Where each part runs</h2>
+
+    <div class="flow">
+      <div class="node">
+        <span class="tag new">new &mdash; this PoC</span>
+        <h3>This browser</h3>
+        <p class="role">Any <code>https://</code> page. Also works from a local file.</p>
+        <ul>
+          <li>Parses the content address</li>
+          <li>Fetches the data map, walks it to the root</li>
+          <li><strong>Verifies every chunk</strong> against its BLAKE3 address</li>
+          <li><strong>Decrypts</strong> and reassembles the file</li>
+        </ul>
+        <p class="stack">WASM build of <code>self_encryption</code> + <code>@libp2p/webrtc</code></p>
+      </div>
+
+      <div class="link">
+        <span class="wire" aria-hidden="true"></span>
+        <strong>WebRTC-Direct</strong>
+        <span>DataChannel over DTLS</span>
+        <span class="absent">no DNS &middot; no CA &middot; no signaling server</span>
+      </div>
+
+      <div class="node">
+        <span class="tag stand-in">stands in for a node</span>
+        <h3>WebRTC-Direct endpoint</h3>
+        <p class="role">What an Autonomi node would run alongside its QUIC listener.</p>
+        <ul>
+          <li>Accepts browser connections directly</li>
+          <li>Answers <code>GET &lt;address&gt;</code> &rarr; raw bytes</li>
+          <li>No cryptography, no data maps</li>
+          <li><strong>Never sees plaintext</strong></li>
+        </ul>
+        <p class="stack">Identified by its certificate hash, not a domain name</p>
+      </div>
+
+      <div class="link">
+        <span class="wire" aria-hidden="true"></span>
+        <strong>QUIC</strong>
+        <span>the ordinary node protocol</span>
+        <span class="absent">unchanged</span>
+      </div>
+
+      <div class="node">
+        <span class="tag unchanged">unmodified</span>
+        <h3>Autonomi network</h3>
+        <p class="role">Ordinary nodes, untouched by any of this.</p>
+        <ul>
+          <li>DHT lookup by content address</li>
+          <li>Returns content-addressed chunks</li>
+        </ul>
+        <p class="stack">No fork, no protocol change, no consensus change</p>
+      </div>
+    </div>
+
+    <p class="hint" style="margin-top:1.1rem">
+      Everything that decides whether the returned bytes are trustworthy sits in the first
+      column. The middle box can refuse to serve &mdash; that is the whole of its power.
+      It cannot tamper, because a content address <em>is</em> the hash of its content, and
+      that check happens here.
+    </p>
+  </section>
+
+  <section>
+    <h2>Where this could go</h2>
+    <p class="claim-p">
+      A WebRTC-Direct listener only works on a node that is publicly reachable, which at first
+      glance limits how much of the network browsers can draw on. But a public node does not
+      have to <em>serve</em> the data &mdash; it could just <strong>broker</strong>: accept the
+      browser, help it establish a connection to another node, and step out of the path.
+    </p>
+    <p class="claim-p">
+      Crucially, that second node does not need to hold the chunk either. It would do exactly
+      what the endpoint in this demo does today &mdash; an ordinary DHT lookup over Kademlia
+      XOR routing, then hand the bytes back. <strong>Any node can answer any address</strong>,
+      so serving browsers is not tied to who stores what. Browser load spreads across the whole
+      network instead of concentrating on the publicly-reachable minority, and a broker's own
+      cost stays near zero regardless of file size.
+    </p>
+    <p class="claim-p">
+      libp2p already has the machinery for this shape &mdash; browser-to-private-peer WebRTC,
+      with the connection negotiated over a relayed hop. The open questions are which NATs it
+      traverses without a fallback relay, and how that squares with Autonomi's own QUIC-based
+      hole punching, which is a different mechanism from the one browsers use.
+    </p>
+    <p class="claim-p">
+      <strong>WebRTC-Direct is not the only candidate.</strong> WebTransport reaches a host the
+      same way &mdash; the browser pins a hash of the server's self-signed certificate instead of
+      validating a chain &mdash; and it became available in every current browser in March 2026.
+      It is the better-behaved option in several respects: real QUIC congestion control, no SRTP
+      or SDP machinery, and none of the deprecation risk hanging over the SDP munging that
+      WebRTC-Direct depends on. The catch is operational: a pinned WebTransport certificate may
+      be valid for at most two weeks, so the hash a page has baked in expires and must be
+      re-published continuously. WebRTC's certificate hash is stable for as long as the node
+      keeps its key, which is what makes the address on this page something you can simply write
+      down. Worth evaluating properly rather than assuming either way.
+    </p>
+    <p class="claim-p">
+      <strong>Further out, and more speculative:</strong> if nodes spoke this channel to
+      <em>each other</em>, a node might get by with fewer open ports. Worth weighing carefully
+      rather than assuming &mdash; SCTP over DTLS carries less well than QUIC, the handshake
+      costs several more round trips, and the DTLS stacks in this space are behind on crypto
+      agility. This very PoC ran into that: current Chrome offers post-quantum key agreement
+      that the Rust DTLS implementation cannot do at all, which sits awkwardly next to
+      Autonomi's pure-PQC direction. As a browser-facing edge, WebRTC earns its place; as a
+      replacement for node-to-node QUIC, the case is much weaker.
+    </p>
+  </section>
+
+  <section>
+    <h2>What this removes</h2>
+    <ul>
+      <li><strong>No browser extension.</strong> Plain page JavaScript and WASM.</li>
+      <li><strong>No local daemon, relay or gateway.</strong> Nothing listening on localhost.</li>
+      <li><strong>No install, no process rights.</strong> Nothing to run on the visitor's machine.</li>
+      <li><strong>No DNS name and no CA certificate</strong> for the node &mdash; a bare IP is enough,
+          because the browser pins the certificate's hash instead of validating a chain.</li>
+      <li><strong>No trusted intermediary.</strong> Point the page at anyone's endpoint and the
+          integrity and confidentiality guarantees are identical.</li>
+    </ul>
+    <p class="hint" style="margin-top:.8rem">
+      Which means any website could embed Autonomi content the way it embeds an image today.
+    </p>
+    <p style="margin-top:1rem">
+      <a class="button" href="./autonomi-webrtc.html" download>Download this page as one file</a>
+    </p>
+    <p class="hint">
+      Everything above in a single self-contained HTML file &mdash; the WASM module inlined,
+      no CDN, no subresources, nothing fetched from anywhere. Open it from your desktop and it
+      still reaches the network. It has a stable hash you can check before trusting it.
+    </p>
+  </section>
+
+  <footer>
+    <p>
+      Source, findings and the exact upstream patches this needed:
+      <a href="https://github.com/rid-dim/autonomi-webrtc-direct-poc">github.com/rid-dim/autonomi-webrtc-direct-poc</a>
+    </p>
+    <p>
+      Claims worth checking rather than taking on trust &mdash; that the endpoint cannot read or
+      alter your data, and that this page loads nothing from anywhere. Both are readable in a
+      few hundred lines.
+    </p>
+  </footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

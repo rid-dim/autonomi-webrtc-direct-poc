@@ -1,0 +1,48 @@
+[package]
+name = "autonomi-webrtc-proxy"
+version = "0.1.0"
+edition = "2021"
+description = "Content-addressed fetch proxy bridging browsers (WebRTC-Direct) to the Autonomi network (QUIC)"
+license = "MIT OR Apache-2.0"
+
+# Kept out of a shared workspace on purpose: the wasm client and this binary have
+# disjoint dependency graphs, and a common lockfile would force the heavy network
+# stack to resolve for every wasm build.
+[workspace]
+
+[dependencies]
+libp2p = { version = "0.56", features = ["tokio", "macros", "identify", "ping"] }
+libp2p-webrtc = { version = "0.9.0-alpha.1", features = ["tokio", "pem"] }
+libp2p-stream = "0.4.0-alpha"
+
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "fs"] }
+futures = "0.3"
+
+# Used only to build local test fixtures (self-encrypt a file and serve the
+# resulting chunks). The proxy never decrypts and never touches a data map on
+# the serving path.
+self_encryption = "0.36"
+rmp-serde = "1"
+blake3 = "1"
+bytes = "1"
+
+# The Autonomi network client. Reads need no wallet and no node — see
+# docs/FINDINGS.md §2.
+ant-core = { git = "https://github.com/WithAutonomi/ant-client.git" }
+
+# Only to select a crypto provider explicitly; see install_crypto_provider().
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
+
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# One-line fix to a webrtc-rs panic that kills every inbound connection from a
+# client preferring AES-256-GCM SRTP. See vendor/README.md for the diff and the
+# upstream story.
+[patch.crates-io]
+libp2p-webrtc = { path = "../../vendor/libp2p-webrtc" }
+webrtc-dtls = { path = "../../vendor/webrtc-dtls" }

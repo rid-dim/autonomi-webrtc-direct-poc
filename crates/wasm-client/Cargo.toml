@@ -1,0 +1,38 @@
+[package]
+name = "autonomi-wasm-client"
+version = "0.1.0"
+edition = "2021"
+description = "Browser-side Autonomi retrieval: chunk verification, data-map walking and self-decryption in WASM"
+license = "MIT OR Apache-2.0"
+
+# Deliberately standalone — see crates/proxy/Cargo.toml for the reasoning.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+self_encryption = "0.36"
+
+# The Autonomi client stores data maps as MessagePack, not bincode.
+# See docs/FINDINGS.md §3 — using self_encryption::deserialize here would fail
+# against every real address.
+rmp-serde = "1"
+
+# Content addressing. `xor_name::XorName::from_content` is SHA3-256 and must
+# not be used for addresses — see docs/FINDINGS.md.
+blake3 = "1"
+
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+# Required on wasm32-unknown-unknown: without the `js` backend, the first call
+# into anything touching `rand` panics at runtime with "no randomness".
+getrandom = { version = "0.2", features = ["js"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

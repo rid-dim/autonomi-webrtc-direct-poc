@@ -1,0 +1,6 @@
+# Pin the self-encryption chunk size so the build cannot be influenced by the
+# ambient shell environment. `self_encryption` reads MAX_CHUNK_SIZE via
+# `option_env!` at compile time, and a stray export (see docs/FINDINGS.md §7)
+# would silently produce a binary incompatible with the live network.
+[env]
+MAX_CHUNK_SIZE = { value = "4190208", force = true }
