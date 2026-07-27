@@ -285,14 +285,24 @@
       down. Worth evaluating properly rather than assuming either way.
     </p>
     <p class="claim-p">
-      <strong>Further out, and more speculative:</strong> if nodes spoke this channel to
-      <em>each other</em>, a node might get by with fewer open ports. Worth weighing carefully
-      rather than assuming &mdash; SCTP over DTLS carries less well than QUIC, the handshake
-      costs several more round trips, and the DTLS stacks in this space are behind on crypto
-      agility. This very PoC ran into that: current Chrome offers post-quantum key agreement
-      that the Rust DTLS implementation cannot do at all, which sits awkwardly next to
-      Autonomi's pure-PQC direction. As a browser-facing edge, WebRTC earns its place; as a
-      replacement for node-to-node QUIC, the case is much weaker.
+      <strong>A browser listener need not cost a second port.</strong> The obvious operational
+      objection &mdash; another open UDP port for every operator to configure &mdash; is
+      avoidable: QUIC and WebRTC can share one, and the demultiplexing scheme is standardised in
+      <a href="https://www.rfc-editor.org/rfc/rfc9443.html">RFC&nbsp;9443</a>. Route on the first
+      byte of each datagram: STUN and DTLS to the WebRTC stack, everything from 64 up to the
+      existing QUIC stack. One firewall rule, existing <code>ip:port</code> bootstrap lists still
+      valid, the same address serving both. The catch is that such a node must not send
+      <code>grease_quic_bit</code>, since the scheme depends on QUIC's fixed bit being set.
+    </p>
+    <p class="claim-p">
+      That also settles a question we had been treating as speculative: whether nodes should
+      speak this channel to <em>each other</em> to reduce open ports. They get the port saving
+      anyway, so the remaining case for it is weak &mdash; SCTP over DTLS carries less well than
+      QUIC, the handshake costs several more round trips, and the DTLS stacks here lag on crypto
+      agility. This PoC hit exactly that: current Chrome offers post-quantum key agreement which
+      the Rust DTLS implementation cannot perform at all, sitting awkwardly beside Autonomi's
+      pure-PQC direction. As a browser-facing edge, WebRTC earns its place; as a replacement for
+      node-to-node QUIC, it does not.
     </p>
   </section>
 

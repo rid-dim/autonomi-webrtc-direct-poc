@@ -284,6 +284,60 @@ Whether that is practical is untested here and not obvious — the two need diff
 configurations (raw public keys and PQC on one side, an X.509 ECDSA P-256 certificate on the
 other), so a server would have to vary its TLS setup per ClientHello. Plausible, not free.
 
+### One port for both: the browser listener need not cost a second port
+
+The obvious objection to putting a WebRTC listener on a node is operational: another open UDP
+port, another firewall rule, another thing for every operator to change. That objection turns
+out to be avoidable — **QUIC and WebRTC can share one UDP port, and the scheme is standardised**
+in [RFC 9443](https://www.rfc-editor.org/rfc/rfc9443.html), which extends RFC 7983 to cover QUIC.
+
+Demultiplex on the first byte of each datagram:
+
+| First byte | Protocol |
+|---|---|
+| 0–3 | STUN → ICE (WebRTC) |
+| 16–19 | ZRTP |
+| 20–63 | DTLS → WebRTC |
+| 64–79 | TURN channel if from a known TURN server, otherwise QUIC |
+| 80–127 | QUIC (short header) |
+| 128–191 | RTP/RTCP |
+| 192–255 | QUIC (long header) |
+
+A node needs only a subset: data channels involve no RTP and no TURN, so STUN and DTLS go to the
+WebRTC stack and everything from 64 up goes to the existing QUIC stack.
+
+It works because QUIC sets the fixed bit — which yields exactly one hard constraint, stated
+explicitly in the RFC:
+
+> Endpoints that wish to demultiplex QUIC MUST NOT send the `grease_quic_bit` transport parameter.
+
+Greasing that bit ([RFC 9287](https://www.rfc-editor.org/rfc/rfc9287.html)) destroys the very
+property the demultiplexer relies on. Worth knowing before rather than after.
+
+**This is where WebRTC beats WebTransport, contrary to what the comparison above might suggest.**
+DTLS 1.2 and QUIC are separate stacks with separate TLS configurations, so the router moves
+packets and the two handshakes never meet: a node keeps raw public keys and PQC on the QUIC side
+while presenting an ordinary self-signed certificate to browsers. WebTransport would instead put
+two irreconcilable TLS configurations on the *same* QUIC endpoint — the PQC identity model on one
+hand, X.509 ECDSA P-256 with ≤2-week validity on the other. For the single-port goal, the
+awkward-looking transport is the tractable one.
+
+The seams already exist in both implementations. `libp2p-webrtc` abstracts over
+`Arc<dyn UDPMux + Send + Sync>`, so an implementation fed by a shared demultiplexer fits its
+existing API — though today `UDPMuxNewAddr::listen_on()` binds its own socket and would need to
+accept one instead. On the other side, quinn (and therefore ant-quic) accepts custom
+`AsyncUdpSocket` implementations. Both sides can already bring their own socket; what is missing
+is the router between them.
+
+What this buys: one firewall rule instead of two, existing `ip:port` bootstrap lists valid
+unchanged, and the same address serving both worlds with only the multiaddr suffix differing.
+Operators would not have to reconfigure anything to start serving browsers — likely worth more
+for adoption than any detail of the transport.
+
+What it costs: the open port now answers two protocols, so the attack surface grows. STUN in
+particular is a classic amplification vector and needs rate limiting, and a node that already
+listens publicly is more exposed than the demo endpoint here.
+
 ### Still open
 
 - **Abuse protection.** The proxy serves any address to anyone with no rate limiting — §5/B4 of

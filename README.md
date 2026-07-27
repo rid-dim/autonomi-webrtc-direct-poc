@@ -79,6 +79,21 @@ WebRTC negotiated over a relayed hop. The open questions are which NATs it trave
 fallback relay, and how it meshes with Autonomi's own QUIC-based hole punching, which is a
 different mechanism from the one browsers use.
 
+### A browser listener need not cost a second port
+
+The operational objection to putting a WebRTC listener on a node — another open UDP port for
+every operator to configure — is avoidable. QUIC and WebRTC can share one port, and the
+demultiplexing scheme is standardised in [RFC 9443](https://www.rfc-editor.org/rfc/rfc9443.html):
+route on the first byte of each datagram, STUN and DTLS to the WebRTC stack, everything from 64
+up to the existing QUIC stack. One firewall rule, existing `ip:port` bootstrap lists unchanged,
+the same address serving both.
+
+The one hard constraint is that a node doing this must not send `grease_quic_bit`, since the
+scheme depends on QUIC's fixed bit being set. Notably this is *easier* with WebRTC than with
+WebTransport: DTLS and QUIC are separate stacks with separate TLS configurations, whereas
+WebTransport would need two irreconcilable ones on the same QUIC endpoint. Details and the
+implementation seams in `docs/FINDINGS.md`.
+
 ### WebRTC-Direct is not the only candidate
 
 WebTransport reaches a host the same way — `serverCertificateHashes` lets the browser pin a
