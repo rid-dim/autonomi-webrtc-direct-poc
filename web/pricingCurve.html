@@ -82,6 +82,7 @@
   .grid-line { stroke: var(--grid); stroke-width: 1; }
   .axis-line { stroke: var(--axis); stroke-width: 1; }
   .tick { fill: var(--text-muted); font-size: 11px; }
+  .tick-alt { font-size: 10px; opacity: .8; }
   .axis-title { fill: var(--text-muted); font-size: 11px; }
   .series { fill: none; stroke: var(--series-1); stroke-width: 2;
             stroke-linecap: round; stroke-linejoin: round; }
@@ -126,6 +127,19 @@
 
   <div class="formula">price_per_chunk_ANT(n) = BASELINE + K &times; (n / D)&sup2;</div>
 
+  <p>
+    At 4&nbsp;MiB chunks there are 256 chunks to a GiB, and both constants happen to be
+    exact 256ths — so the whole thing collapses to something you can hold in your head:
+  </p>
+
+  <div class="formula">ANT_per_GiB(n) = 1 + 9 &times; (n / 6000)&sup2;</div>
+
+  <p>
+    One ANT per GiB for an empty node, ten at <code>D</code>. And because the term is
+    squared, <strong>doubling what a node holds roughly quadruples what it charges</strong>.
+    That is the property worth arguing about — not the level, but the exponent.
+  </p>
+
   <table class="const-table">
     <caption>Constants, from <code>ant-protocol/src/payment/pricing.rs</code></caption>
     <thead>
@@ -143,13 +157,14 @@
   <figure>
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 720 340" role="img"
-           aria-label="Storage price per GiB rising quadratically with the number of records a node stores. One ANT per GiB when empty, ten ANT per GiB at six thousand records, about 145 at twenty-four thousand.">
+           aria-label="Storage price per GiB rising quadratically with node occupancy. One ANT per GiB when empty, ten at six thousand records (about 23 GiB held), twenty-seven at a forty GiB node, and roughly fifty by fourteen thousand records.">
       </svg>
       <div class="tooltip" id="tip" role="status" aria-live="polite"></div>
     </div>
     <figcaption class="note" style="margin-top:.7rem">
-      Price per GiB in ANT, at 4&nbsp;MiB chunks (256 chunks per GiB). Hover for values;
-      the same numbers are tabulated below.
+      Price per GiB in ANT, at 4&nbsp;MiB chunks (256 chunks per GiB). The lower axis gives
+      the same position as data held by the node. Hover for values; the same numbers are
+      tabulated below.
     </figcaption>
   </figure>
 
@@ -160,6 +175,7 @@
     <thead>
       <tr>
         <th class="num">Records n</th>
+        <th class="num">Node holds</th>
         <th class="num">ANT / chunk</th>
         <th class="num">ANT / GiB</th>
         <th class="num">USD / GiB</th>
@@ -183,6 +199,41 @@
     <em>“~$25/GB at the lower stable boundary and ~$0/GB when nodes were empty — both
     unreasonable.”</em> The non-zero baseline is what stops a fresh node from offering
     free storage, which would otherwise be an obvious spam target.
+  </p>
+
+  <h2>What the exponent does in practice</h2>
+
+  <p>
+    A worked example, because the shape is easier to argue about with numbers attached.
+    Take a 2.4&nbsp;GiB upload and watch its cost as the nodes storing it fill up:
+  </p>
+
+  <table>
+    <caption>Cost of storing 2.4&nbsp;GiB, by how much the quoting node already holds.</caption>
+    <thead>
+      <tr>
+        <th class="num">Node holds</th>
+        <th class="num">Records n</th>
+        <th class="num">ANT for 2.4 GiB</th>
+        <th class="num">vs. 13 GiB</th>
+      </tr>
+    </thead>
+    <tbody id="rows2"></tbody>
+  </table>
+
+  <p>
+    So a node going from 13 to 24&nbsp;GiB — not quite a doubling — takes the price for the
+    same upload from <strong>9 to 25 ANT</strong>, close to 3&times;. That is the quadratic
+    doing exactly what a quadratic does, and it is a fair thing to raise: the objection is
+    about the <em>rate of change</em>, not about whether $1/GiB is cheap for permanent storage.
+    Both can be true at once.
+  </p>
+
+  <p>
+    Worth checking the extrapolation too, though. At a 40&nbsp;GiB node the formula gives
+    <strong>about 65 ANT</strong> for that 2.4&nbsp;GiB, not hundreds — the price only reaches
+    200&nbsp;ANT once a node is holding roughly <strong>71&nbsp;GiB</strong>. The direction of
+    the concern holds; the specific figure overshoots by around 3&times;.
   </p>
 
   <h2>The inverse, and why it is written defensively</h2>
@@ -264,21 +315,46 @@ document.getElementById('rows').innerHTML = ROWS.map((n) => {
   const anchor = (n === 0 || n === 6000) ? ' class="anchor"' : '';
   return `<tr${anchor}>` +
     `<td class="num">${n.toLocaleString('en-US')}</td>` +
+    `<td class="num">${fmt(n * 4 / 1024, 0)} GiB</td>` +
     `<td class="num">${fmt(antPerChunk(n), 6)}</td>` +
     `<td class="num">${fmt(gib, 2)}</td>` +
     `<td class="num">$${fmt(gib * USD_PER_ANT, 2)}</td>` +
   `</tr>`;
 }).join('');
 
+// Second table: what one upload costs as the quoting node fills up.
+const UPLOAD_GIB = 2.4;
+const HELD = [13, 24, 40, 55, 71];          // GiB held by the node
+const recordsFor = (gib) => Math.round(gib * 1024 / 4);
+const baselineCost = UPLOAD_GIB * antPerGib(recordsFor(HELD[0]));
+
+document.getElementById('rows2').innerHTML = HELD.map((gib) => {
+  const n = recordsFor(gib);
+  const cost = UPLOAD_GIB * antPerGib(n);
+  return '<tr>' +
+    `<td class="num">${gib} GiB</td>` +
+    `<td class="num">${n.toLocaleString('en-US')}</td>` +
+    `<td class="num">${fmt(cost, 1)}</td>` +
+    `<td class="num">${fmt(cost / baselineCost, 1)}\u00d7</td>` +
+  '</tr>';
+}).join('');
+
 // ---- chart -----------------------------------------------------------------
 
 const W = 720, H = 340;
-const M = { top: 22, right: 26, bottom: 46, left: 64 };
+const M = { top: 22, right: 26, bottom: 58, left: 64 };
 const plotW = W - M.left - M.right;
 const plotH = H - M.top - M.bottom;
 
-const X_MAX = 24000;                       // 4 × D — enough to show the shape
-const Y_MAX = Math.ceil(antPerGib(X_MAX) / 25) * 25;
+// Centred so D (~23 GiB held) sits near the middle, with enough tail to show
+// where the quadratic actually starts to hurt.
+const X_MAX = 14000;
+// Aim for ~5 gridlines at a round step, whatever the range works out to.
+const Y_STEP = (() => {
+  const rough = antPerGib(X_MAX) / 5;
+  return [1, 2, 5, 10, 20, 25, 50, 100, 250].find((s) => s >= rough) ?? 500;
+})();
+const Y_MAX = Math.ceil(antPerGib(X_MAX) / Y_STEP) * Y_STEP;
 
 const sx = (n) => M.left + (n / X_MAX) * plotW;
 const sy = (v) => M.top + plotH - (v / Y_MAX) * plotH;
@@ -295,7 +371,7 @@ const svg = document.getElementById('chart');
 
 // Gridlines and y ticks — solid and recessive, never dashed.
 const yTicks = [];
-for (let v = 0; v <= Y_MAX; v += 25) yTicks.push(v);
+for (let v = 0; v <= Y_MAX; v += Y_STEP) yTicks.push(v);
 for (const v of yTicks) {
   svg.appendChild(el('line', {
     class: 'grid-line', x1: M.left, x2: M.left + plotW, y1: sy(v), y2: sy(v)
@@ -309,15 +385,20 @@ for (const v of yTicks) {
 svg.appendChild(el('line', {
   class: 'axis-line', x1: M.left, x2: M.left + plotW, y1: sy(0), y2: sy(0)
 }));
-for (const n of [0, 6000, 12000, 18000, 24000]) {
+const GIB_PER_RECORD = 4 / 1024;           // 4 MiB chunks
+for (const n of [0, 3000, 6000, 9000, 12000, 14000]) {
   svg.appendChild(el('text', {
-    class: 'tick', x: sx(n), y: sy(0) + 20, 'text-anchor': 'middle'
+    class: 'tick', x: sx(n), y: sy(0) + 18, 'text-anchor': 'middle'
   }, n.toLocaleString('en-US')));
+  // Same axis, second unit — what operators actually think in.
+  svg.appendChild(el('text', {
+    class: 'tick tick-alt', x: sx(n), y: sy(0) + 32, 'text-anchor': 'middle'
+  }, Math.round(n * GIB_PER_RECORD) + ' GiB'));
 }
 
 svg.appendChild(el('text', {
-  class: 'axis-title', x: M.left + plotW / 2, y: H - 6, 'text-anchor': 'middle'
-}, 'records stored by the node  (n)'));
+  class: 'axis-title', x: M.left + plotW / 2, y: H - 4, 'text-anchor': 'middle'
+}, 'records stored by the node (n)  /  data held'));
 svg.appendChild(el('text', {
   class: 'axis-title', x: 14, y: M.top + plotH / 2,
   'text-anchor': 'middle', transform: `rotate(-90 14 ${M.top + plotH / 2})`
@@ -333,8 +414,9 @@ svg.appendChild(el('path', { class: 'series', d }));
 
 // Two anchor points, directly labelled — the round numbers the constants target.
 const anchors = [
-  { n: 0,    label: '1 ANT / GiB when empty',       dx: 10,  dy: -12, anchor: 'start' },
-  { n: 6000, label: '10 ANT / GiB at D = 6,000',    dx: 10,  dy: -14, anchor: 'start' }
+  { n: 0,     label: '1 ANT / GiB when empty',            dx: 10, dy: -12, anchor: 'start' },
+  { n: 6000,  label: '10 ANT / GiB at D = 6,000 (~23 GiB)', dx: 10, dy: -14, anchor: 'start' },
+  { n: 10240, label: '27 ANT / GiB at a 40 GiB node',      dx: -10, dy: -14, anchor: 'end' }
 ];
 for (const a of anchors) {
   const y = antPerGib(a.n);
@@ -379,7 +461,7 @@ function moveHover (event) {
   hoverDot.style.opacity = 1;
 
   tip.innerHTML =
-    `<b>${Math.round(n).toLocaleString('en-US')}</b> <span class="k">records</span><br>` +
+    `<b>${Math.round(n).toLocaleString('en-US')}</b> <span class="k">records — ${fmt(n * 4 / 1024, 1)} GiB held</span><br>` +
     `<b>${fmt(gib, 2)}</b> <span class="k">ANT / GiB</span><br>` +
     `<b>$${fmt(gib * USD_PER_ANT, 2)}</b> <span class="k">/ GiB at $0.10 per ANT</span>`;
   tip.style.opacity = 1;
