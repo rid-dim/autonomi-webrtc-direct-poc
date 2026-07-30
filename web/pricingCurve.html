@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autonomi storage pricing curve</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --surface-2:      #f4f3f0;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --axis:           #c3c2b7;
+    --grid:           #e8e7e2;
+    --series-1:       #2a78d6;
+    --line:           #e2e1db;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --surface-2:      #232322;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --axis:           #383835;
+      --grid:           #2a2a28;
+      --series-1:       #3987e5;
+      --line:           #2f2f2c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --surface-2:      #232322;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --axis:           #383835;
+    --grid:           #2a2a28;
+    --series-1:       #3987e5;
+    --line:           #2f2f2c;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1rem 4rem;
+    background: var(--surface-1); color: var(--text-primary);
+    font: 15px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 48rem; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 .4rem; letter-spacing: -0.01em; }
+  h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em;
+       color: var(--text-muted); margin: 2.4rem 0 .9rem; font-weight: 600; }
+  p { margin: 0 0 .9rem; color: var(--text-secondary); }
+  .lede { font-size: 1.02rem; margin-bottom: 1.6rem; }
+  a { color: var(--series-1); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+
+  .formula {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 1.1rem 1.2rem; margin: 0 0 1.2rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1rem; color: var(--text-primary); overflow-x: auto;
+  }
+
+  table { border-collapse: collapse; width: 100%; font-size: .87rem; }
+  caption { text-align: left; color: var(--text-muted); font-size: .8rem;
+            padding-bottom: .5rem; }
+  th, td { padding: .42rem .6rem; border-bottom: 1px solid var(--line); }
+  th { text-align: left; color: var(--text-muted); font-weight: 600;
+       font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.anchor td { color: var(--text-primary); font-weight: 600; }
+  .const-table td:first-child { font-family: ui-monospace, Menlo, monospace; }
+
+  figure { margin: 0; }
+  .chart-wrap { position: relative; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; }
+  .tick { fill: var(--text-muted); font-size: 11px; }
+  .axis-title { fill: var(--text-muted); font-size: 11px; }
+  .series { fill: none; stroke: var(--series-1); stroke-width: 2;
+            stroke-linecap: round; stroke-linejoin: round; }
+  .anchor-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+  .anchor-label { fill: var(--text-primary); font-size: 11px; font-weight: 600; }
+  .anchor-rule { stroke: var(--axis); stroke-width: 1; stroke-dasharray: none; opacity: .55; }
+  .hover-rule { stroke: var(--text-muted); stroke-width: 1; opacity: 0; }
+  .hover-dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; opacity: 0; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; opacity: 0; transform: translate(-50%, -115%);
+    background: var(--surface-1); border: 1px solid var(--axis); border-radius: 7px;
+    padding: .45rem .6rem; font-size: .78rem; line-height: 1.45;
+    box-shadow: 0 2px 10px rgb(0 0 0 / .12); white-space: nowrap;
+    color: var(--text-primary); transition: opacity .1s;
+  }
+  .tooltip b { font-variant-numeric: tabular-nums; }
+  .tooltip .k { color: var(--text-muted); }
+
+  .note { font-size: .84rem; color: var(--text-muted); }
+  .sources li { margin-bottom: .45rem; font-size: .88rem; }
+  ul { padding-left: 1.15rem; color: var(--text-secondary); }
+  footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
+           font-size: .82rem; color: var(--text-muted); }
+</style>
+</head>
+<body class="viz-root">
+<main>
+
+  <h1>Autonomi storage pricing curve</h1>
+  <p class="lede">
+    What a node charges to store a chunk, as a function of how much it already holds.
+    Quadratic in the node's occupancy, with a non-zero floor.
+  </p>
+
+  <p>
+    The formula is defined once, in <code>ant-protocol</code>, and re-exported by
+    <code>ant-node</code> rather than reimplemented. That matters because both sides
+    compute it: the node when pricing a quote, the client when verifying the forced
+    price before paying. A single definition means the two can never drift apart.
+  </p>
+
+  <div class="formula">price_per_chunk_ANT(n) = BASELINE + K &times; (n / D)&sup2;</div>
+
+  <table class="const-table">
+    <caption>Constants, from <code>ant-protocol/src/payment/pricing.rs</code></caption>
+    <thead>
+      <tr><th>Constant</th><th class="num">Value</th><th>Role</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>BASELINE</td><td class="num">0.00390625 ANT</td><td>Price at empty — a bootstrap-phase spam barrier</td></tr>
+      <tr><td>K</td><td class="num">0.03515625 ANT</td><td>Quadratic coefficient</td></tr>
+      <tr><td>D</td><td class="num">6000 records</td><td>Lower stable boundary</td></tr>
+    </tbody>
+  </table>
+
+  <h2>The curve</h2>
+
+  <figure>
+    <div class="chart-wrap">
+      <svg id="chart" viewBox="0 0 720 340" role="img"
+           aria-label="Storage price per GiB rising quadratically with the number of records a node stores. One ANT per GiB when empty, ten ANT per GiB at six thousand records, about 145 at twenty-four thousand.">
+      </svg>
+      <div class="tooltip" id="tip" role="status" aria-live="polite"></div>
+    </div>
+    <figcaption class="note" style="margin-top:.7rem">
+      Price per GiB in ANT, at 4&nbsp;MiB chunks (256 chunks per GiB). Hover for values;
+      the same numbers are tabulated below.
+    </figcaption>
+  </figure>
+
+  <h2>Reference points</h2>
+
+  <table>
+    <caption>USD column assumes $0.10 per ANT, the token price the constants were anchored against.</caption>
+    <thead>
+      <tr>
+        <th class="num">Records n</th>
+        <th class="num">ANT / chunk</th>
+        <th class="num">ANT / GiB</th>
+        <th class="num">USD / GiB</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <h2>Why it looks like this</h2>
+
+  <p>
+    The two anchor points are deliberately round. An empty node charges exactly
+    <strong>1 ANT per GiB</strong>; at the lower stable boundary <code>D</code> it charges
+    exactly <strong>10 ANT per GiB</strong> — $0.10 and $1.00 respectively at the assumed
+    token price. With 4&nbsp;MiB chunks, <code>D&nbsp;=&nbsp;6000</code> records is roughly
+    23&nbsp;GiB held per node, and past that the quadratic term climbs steeply.
+  </p>
+
+  <p>
+    The source comments explain what this replaced: an earlier formula produced
+    <em>“~$25/GB at the lower stable boundary and ~$0/GB when nodes were empty — both
+    unreasonable.”</em> The non-zero baseline is what stops a fresh node from offering
+    free storage, which would otherwise be an obvious spam target.
+  </p>
+
+  <h2>The inverse, and why it is written defensively</h2>
+
+  <p>
+    <code>derive_records_stored_from_price()</code> runs the formula backwards: given a
+    quoted price, how full does the quoting node claim to be? It saturates at
+    <code>u64::MAX</code> rather than overflowing, and the comment says why — it is called
+    on untrusted, deserialized quote prices <em>before</em> signature verification, so a
+    panic there would be a pre-authentication crash vector. An oversized price is left for
+    the range check to reject instead.
+  </p>
+
+  <h2>Sources</h2>
+
+  <ul class="sources">
+    <li>
+      <a href="https://github.com/WithAutonomi/ant-protocol/blob/main/src/payment/pricing.rs">
+        <code>ant-protocol/src/payment/pricing.rs</code></a>
+      — the formula, constants and unit tests
+      (<a href="https://github.com/WithAutonomi/ant-protocol/blob/main/src/payment/pricing.rs#L83">calculate_price</a>,
+      <a href="https://github.com/WithAutonomi/ant-protocol/blob/main/src/payment/pricing.rs#L57">derive_records_stored_from_price</a>,
+      <a href="https://github.com/WithAutonomi/ant-protocol/blob/main/src/payment/pricing.rs#L28">constants</a>)
+    </li>
+    <li>
+      <a href="https://github.com/WithAutonomi/ant-node/blob/main/src/payment/pricing.rs">
+        <code>ant-node/src/payment/pricing.rs</code></a>
+      — a 13-line re-export, kept so existing callers still compile
+    </li>
+    <li>
+      <a href="https://github.com/WithAutonomi/ant-node/blob/main/docs/adr/ADR-0004-commitment-bound-quote-pricing.md">
+        ADR-0004 — Commitment-bound quote pricing</a>
+      — why client and node must compute identical prices
+    </li>
+    <li>
+      <a href="https://github.com/WithAutonomi/ant-node/blob/main/docs/adr/ADR-0008-storage-economics-and-payment-protocol.md">
+        ADR-0008 — Storage economics and payment protocol</a>
+      — the surrounding economic design
+    </li>
+  </ul>
+
+  <footer>
+    Figures on this page are computed in the browser from the constants above, so they can be
+    checked against the source rather than taken on trust. Read from the repositories on
+    30&nbsp;July&nbsp;2026; the formula is versioned with <code>ant-protocol</code> and may change.
+  </footer>
+
+</main>
+
+<script>
+// The formula, transcribed from ant-protocol/src/payment/pricing.rs.
+// Wei are integers there; BigInt keeps this page's arithmetic identical rather
+// than merely close, so the numbers shown are the ones a node would quote.
+const BASELINE_WEI    = 3906250000000000n;
+const COEFFICIENT_WEI = 35156250000000000n;
+const DIVISOR         = 6000n;
+const DIVISOR_SQUARED = DIVISOR * DIVISOR;
+
+/** Price in wei for a node already storing `n` close records. */
+function priceWei (n) {
+  const nn = BigInt(Math.round(n));
+  return BASELINE_WEI + (nn * nn * COEFFICIENT_WEI) / DIVISOR_SQUARED;
+}
+
+const WEI_PER_ANT = 1e18;
+const CHUNKS_PER_GIB = 256;        // 1 GiB / 4 MiB
+const USD_PER_ANT = 0.10;          // the price the constants were anchored against
+
+const antPerChunk = (n) => Number(priceWei(n)) / WEI_PER_ANT;
+const antPerGib   = (n) => antPerChunk(n) * CHUNKS_PER_GIB;
+
+// ---- table -----------------------------------------------------------------
+
+const ROWS = [0, 1000, 3000, 6000, 12000, 18000, 24000, 50000, 100000];
+const fmt = (v, d) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+document.getElementById('rows').innerHTML = ROWS.map((n) => {
+  const gib = antPerGib(n);
+  const anchor = (n === 0 || n === 6000) ? ' class="anchor"' : '';
+  return `<tr${anchor}>` +
+    `<td class="num">${n.toLocaleString('en-US')}</td>` +
+    `<td class="num">${fmt(antPerChunk(n), 6)}</td>` +
+    `<td class="num">${fmt(gib, 2)}</td>` +
+    `<td class="num">$${fmt(gib * USD_PER_ANT, 2)}</td>` +
+  `</tr>`;
+}).join('');
+
+// ---- chart -----------------------------------------------------------------
+
+const W = 720, H = 340;
+const M = { top: 22, right: 26, bottom: 46, left: 64 };
+const plotW = W - M.left - M.right;
+const plotH = H - M.top - M.bottom;
+
+const X_MAX = 24000;                       // 4 × D — enough to show the shape
+const Y_MAX = Math.ceil(antPerGib(X_MAX) / 25) * 25;
+
+const sx = (n) => M.left + (n / X_MAX) * plotW;
+const sy = (v) => M.top + plotH - (v / Y_MAX) * plotH;
+
+const svgNS = 'http://www.w3.org/2000/svg';
+const el = (name, attrs, text) => {
+  const node = document.createElementNS(svgNS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (text != null) node.textContent = text;
+  return node;
+};
+
+const svg = document.getElementById('chart');
+
+// Gridlines and y ticks — solid and recessive, never dashed.
+const yTicks = [];
+for (let v = 0; v <= Y_MAX; v += 25) yTicks.push(v);
+for (const v of yTicks) {
+  svg.appendChild(el('line', {
+    class: 'grid-line', x1: M.left, x2: M.left + plotW, y1: sy(v), y2: sy(v)
+  }));
+  svg.appendChild(el('text', {
+    class: 'tick', x: M.left - 10, y: sy(v) + 4, 'text-anchor': 'end'
+  }, v.toLocaleString('en-US')));
+}
+
+// x axis
+svg.appendChild(el('line', {
+  class: 'axis-line', x1: M.left, x2: M.left + plotW, y1: sy(0), y2: sy(0)
+}));
+for (const n of [0, 6000, 12000, 18000, 24000]) {
+  svg.appendChild(el('text', {
+    class: 'tick', x: sx(n), y: sy(0) + 20, 'text-anchor': 'middle'
+  }, n.toLocaleString('en-US')));
+}
+
+svg.appendChild(el('text', {
+  class: 'axis-title', x: M.left + plotW / 2, y: H - 6, 'text-anchor': 'middle'
+}, 'records stored by the node  (n)'));
+svg.appendChild(el('text', {
+  class: 'axis-title', x: 14, y: M.top + plotH / 2,
+  'text-anchor': 'middle', transform: `rotate(-90 14 ${M.top + plotH / 2})`
+}, 'ANT per GiB'));
+
+// The curve.
+let d = '';
+for (let i = 0; i <= 240; i++) {
+  const n = (i / 240) * X_MAX;
+  d += (i === 0 ? 'M' : 'L') + sx(n).toFixed(2) + ' ' + sy(antPerGib(n)).toFixed(2);
+}
+svg.appendChild(el('path', { class: 'series', d }));
+
+// Two anchor points, directly labelled — the round numbers the constants target.
+const anchors = [
+  { n: 0,    label: '1 ANT / GiB when empty',       dx: 10,  dy: -12, anchor: 'start' },
+  { n: 6000, label: '10 ANT / GiB at D = 6,000',    dx: 10,  dy: -14, anchor: 'start' }
+];
+for (const a of anchors) {
+  const y = antPerGib(a.n);
+  svg.appendChild(el('line', {
+    class: 'anchor-rule', x1: sx(a.n), x2: sx(a.n), y1: sy(y), y2: sy(0)
+  }));
+  svg.appendChild(el('circle', { class: 'anchor-dot', cx: sx(a.n), cy: sy(y), r: 4.5 }));
+  svg.appendChild(el('text', {
+    class: 'anchor-label', x: sx(a.n) + a.dx, y: sy(y) + a.dy, 'text-anchor': a.anchor
+  }, a.label));
+}
+
+// ---- hover layer -----------------------------------------------------------
+
+const hoverRule = el('line', { class: 'hover-rule', y1: M.top, y2: M.top + plotH });
+const hoverDot = el('circle', { class: 'hover-dot', r: 5 });
+svg.appendChild(hoverRule);
+svg.appendChild(hoverDot);
+
+const tip = document.getElementById('tip');
+const wrap = document.querySelector('.chart-wrap');
+
+// A full-height capture band, so the pointer never has to find the 2px line.
+const capture = el('rect', {
+  x: M.left, y: M.top, width: plotW, height: plotH, fill: 'transparent'
+});
+svg.appendChild(capture);
+
+function moveHover (event) {
+  const box = svg.getBoundingClientRect();
+  const xPx = ((event.clientX - box.left) / box.width) * W;
+  const n = Math.max(0, Math.min(X_MAX, ((xPx - M.left) / plotW) * X_MAX));
+
+  const gib = antPerGib(n);
+  const cx = sx(n), cy = sy(gib);
+
+  hoverRule.setAttribute('x1', cx);
+  hoverRule.setAttribute('x2', cx);
+  hoverRule.style.opacity = 1;
+  hoverDot.setAttribute('cx', cx);
+  hoverDot.setAttribute('cy', cy);
+  hoverDot.style.opacity = 1;
+
+  tip.innerHTML =
+    `<b>${Math.round(n).toLocaleString('en-US')}</b> <span class="k">records</span><br>` +
+    `<b>${fmt(gib, 2)}</b> <span class="k">ANT / GiB</span><br>` +
+    `<b>$${fmt(gib * USD_PER_ANT, 2)}</b> <span class="k">/ GiB at $0.10 per ANT</span>`;
+  tip.style.opacity = 1;
+  tip.style.left = (cx / W) * box.width + 'px';
+  tip.style.top = (cy / H) * box.height + 'px';
+}
+
+function hideHover () {
+  hoverRule.style.opacity = 0;
+  hoverDot.style.opacity = 0;
+  tip.style.opacity = 0;
+}
+
+wrap.addEventListener('pointermove', moveHover);
+wrap.addEventListener('pointerleave', hideHover);
+</script>
+</body>
+</html>

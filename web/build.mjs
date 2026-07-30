@@ -43,6 +43,10 @@ const multi = await esbuild.build({
 await fs.writeFile(path.join(outdir, 'index.html'), html)
 await fs.cp('src/wasm', path.join(outdir, 'wasm'), { recursive: true })
 
+// Standalone pages that share the host but not the app. Copied verbatim — they
+// have no build step and no dependencies.
+await fs.copyFile('pricingCurve.html', path.join(outdir, 'pricingCurve.html'))
+
 // --- single-file build ------------------------------------------------------
 
 const inline = await esbuild.build({
