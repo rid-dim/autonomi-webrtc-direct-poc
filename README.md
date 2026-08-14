@@ -22,7 +22,8 @@ daemon or relay, no installed software, no process running on the visitor's mach
 >    it can share the node's existing UDP port (RFC 9443).
 > 4. **WebTransport is only the escape hatch** if browsers ever restrict WebRTC-Direct
 >    (nothing announced, no dates). Going that way would make pre-generated certificate
->    schedules an absolute **must**, because its certificates expire every 14 days.
+>    schedules an absolute **must**, because its certificates expire every 14 days —
+>    generated a year ahead and re-communicated at regular intervals.
 >
 > Deep dives: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
 > [docs/TRANSPORT-CHOICE.md](docs/TRANSPORT-CHOICE.md) ·
@@ -132,11 +133,13 @@ standards-track, but its pinned certificates must be ECDSA P-256 and **valid at 
 weeks** — the node's address expires every 14 days, forever. If browsers ever restricted
 WebRTC-Direct (nothing of the sort is announced or dated), switching is cheap because
 only the tunnel changes — but going that way makes one thing an absolute **must**, not an
-optimization: **pre-generated certificate schedules.** Each node would generate 1–2 years
-of consecutive short-lived certificates in advance, publish the full hash schedule into
-the bootstrap cache, and nodes would keep each other's schedules fresh — otherwise any
-client offline for more than two weeks can no longer reach anything and must fetch fresh
-bootstrap contacts by hand. Full reasoning:
+optimization: **pre-generated certificate schedules.** The concrete proposal: each node
+generates **a full year of consecutive short-lived certificates in advance** and publishes
+the complete hash schedule into the bootstrap cache; then, **at regular intervals, it
+extends the schedule and re-communicates it** (as part of normal peer exchange), so every
+healthy participant always holds roughly a year of future reachability for its peers.
+Without that, any client offline for more than two weeks can no longer reach anything and
+must fetch fresh bootstrap contacts by hand. Full reasoning:
 [docs/TRANSPORT-CHOICE.md](docs/TRANSPORT-CHOICE.md).
 
 ## Where this could go
