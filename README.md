@@ -46,7 +46,15 @@ to the security model for the same reason UDP's lack of encryption is irrelevant
 **everything worth protecting is already encrypted at the application layer, in code we
 control, before it ever touches a transport.** That is also why nothing here depends on
 browser crypto capabilities — the browser's TLS stack is never asked to do anything but
-carry ciphertext. The full layer model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+carry ciphertext.
+
+To head off the obvious objection: **this is end-to-end post-quantum secure — full stop.**
+"But WebRTC isn't quantum-safe" is a category error, exactly like saying the current
+network isn't quantum-safe because raw UDP isn't. WebRTC/WebTransport sits at the UDP
+transport level, and every byte of communicated content that crosses it is post-quantum
+protected end to end, from the application layer on one side to the application layer on
+the other. The tunnel only ever carries ciphertext it cannot read and cannot usefully
+break. The full layer model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## The question this answers
 

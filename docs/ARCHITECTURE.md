@@ -38,7 +38,13 @@ around the bytes in flight differs.**
 
 WebRTC's own encryption (DTLS 1.2, classical elliptic curves) is not quantum-safe, and we
 do not care — for the same reason nobody worries that raw UDP has no encryption at all.
-The layers stack like this:
+
+Let that also settle the argument before it starts: **the design is end-to-end
+post-quantum secure.** Claiming otherwise because "WebRTC isn't PQ" is the same category
+error as calling the current network insecure because UDP isn't PQ. The tunnel sits at
+the UDP transport level; all communicated content is post-quantum protected at the
+application layer on both ends, so what crosses the tunnel is ciphertext that a quantum
+adversary recording the wire gains nothing from. The layers stack like this:
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
