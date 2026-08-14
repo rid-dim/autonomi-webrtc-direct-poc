@@ -190,8 +190,8 @@ Read in this order to reconstruct the design from first principles:
 
 ## Status
 
-Verified end to end against the production network in Chrome: 15.0 MiB in 38.6 s, from an
-`https://` page, with the file playing back in the browser.
+Verified end to end against the production network in Chrome and Safari: 15.0 MiB in
+38.6 s (Chrome), from an `https://` page, with the file playing back in the browser.
 
 Also available as **one self-contained HTML file** (744 KiB, WASM inlined, nothing fetched
 from anywhere): `npm run build` writes it to `dist/autonomi-webrtc.html`, and the demo
@@ -204,7 +204,7 @@ Not done, and deliberately not claimed:
   Chrome's SCTP layer. Fixing it properly means multiplexing over one long-lived stream.
 - **Occasional stream resets.** Roughly one run in several still fails partway with
   `the stream has been reset` and succeeds on retry.
-- **Only Chrome tested.** Firefox and Safari are unverified.
+- **Firefox untested.** Chrome and Safari are verified end to end; Firefox is not yet.
 - **`file://` untested.** The single-file build should work from disk, but only a bare
   static server has been verified.
 

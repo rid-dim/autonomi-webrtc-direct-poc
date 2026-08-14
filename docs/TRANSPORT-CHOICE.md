@@ -34,7 +34,7 @@ WebRTC-Direct delivers that:
   post-quantum crypto on the QUIC side while showing browsers an ordinary self-signed
   certificate. One firewall rule, existing bootstrap lists valid unchanged.
 - **Shipping in every current browser** — Chrome, Firefox, Safari — and proven against the
-  live Autonomi network by this proof of concept.
+  live Autonomi network by this proof of concept, end to end in Chrome and Safari.
 
 The known objection is that WebRTC-Direct depends on SDP munging, which the standard
 frowns upon. That risk is real but abstract: no browser has announced a restriction, no

@@ -344,5 +344,5 @@ listens publicly is more exposed than the demo endpoint here.
   the work order is not implemented.
 - **Concurrency.** Serialised because of bug #5. Fixing it properly means multiplexing requests
   over one long-lived stream instead of a data channel per chunk.
-- **Browser coverage.** Verified in Chrome. Firefox and Safari are untested, and bug #2 shows how
+- **Browser coverage.** Verified in Chrome and Safari. Firefox is untested, and bug #2 shows how
   much the DTLS stack differs between clients.
