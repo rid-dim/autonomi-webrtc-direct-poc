@@ -2,7 +2,7 @@
 
 Everything below was verified against the actual source (repos cloned and inspected, code
 executed) rather than assumed. It supersedes the corresponding parts of
-`autonomi-webrtc-direct-poc.md`. Each entry states how it was verified so it can be re-checked.
+`work-order.md`. Each entry states how it was verified so it can be re-checked.
 
 > **What is being proved.** That a browser can reach the Autonomi network with *nothing
 > installed* — no extension, no local daemon or relay, no process on the user's machine. The
